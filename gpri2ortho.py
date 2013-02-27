@@ -11,9 +11,9 @@ and processed with the GAMMA software.
 Outputs a georeferenced gtif orthorectified using the input DEM
 
 To do:
-Proper argument parsing - gcp coords, multiple par, output resolution?
-Existence checks for files
-Proper datetime handling
+Proper argument parsing with python argparse - gcp coords, multiple par, output resolution?
+Existence checks for all input files
+Proper datetime handling for determining interferogram interval
 Copy library functions here for standalone use
 Allow override of GPRI coords with those from DGPS
 Allow for multiple GCPs and an improved azimuth for N
@@ -107,7 +107,7 @@ def extractPoint(b, x, y):
     #Creates bogus values near edges
     #return scipy.ndimage.interpolation.map_coordinates(b, [y, x], cval=b.fill_value) 
 
-#Open img image (or image to project)
+#Open input file 
 in_fn = sys.argv[1]
 in_ext = os.path.splitext(in_fn)[1].split('.')[1]
 
@@ -144,7 +144,8 @@ center_time = p['center_time']
 img_ma = numpy.ma.masked_equal(open_img(in_fn, p), 0)
 
 single_list = ['slc', 'mli']
-multi_list = ['unw', 'diff', 'adf', 'cc']
+multi_list = ['unw', 'diff']
+#'adf', 'cc'
 
 if in_ext in single_list:
     #Mask out values - might want to make this a function of range 
@@ -196,7 +197,6 @@ az_pixel_spacing = az_angle_step * numpy.arange(near_range_slc, far_range_slc, r
 #46.78364631
 #-121.7502352
 #ref_coord = [-121.7502352, 46.78364631, ref_coord[2]]
-
 #Need to correct boresight for "principal point" of radar relative to GPS point at top of tower - this will depend on antenna used for interferogram
 
 #Convert GPRI origin to projected coords
@@ -210,6 +210,7 @@ ct = osr.CoordinateTransformation(ref_srs, dem_srs)
 ref_coord_proj = numpy.array(ct.TransformPoint(*ref_coord))
 
 #GCP reference 
+
 #Paradise Pullout (roi)
 #Radar coords (az, r), (row, col)
 gcp_rc = [302, 665]
@@ -239,12 +240,13 @@ N_v = numpy.array([ref_coord_proj[0], ref_coord_proj[1] + far_range_slc] - ref_c
 ang_N_minus_gcp = signed_angle(gcp_v, N_v)
 
 #This is the N azimuth sample number
-#NOTE: may be outside range of (0, azimuth_lines) for south facing surveys
+#NOTE: may be outside range of (0, azimuth_lines) 
 az_N = gcp_rc[0] - ang_N_minus_gcp / az_angle_step 
 
 #az_angle_list = ang_N_minus_gcp + az_angle_step * numpy.arange(azimuth_lines)
 az_angle_list = az_angle_step * (numpy.arange(azimuth_lines) - az_N)
 
+#This is for generalization of the (r, az) to (x, y) coords
 range_list = numpy.empty_like(az_angle_list)
 range_list = far_range_slc
 
@@ -256,24 +258,18 @@ range_list = far_range_slc
 x = ref_coord_proj[0] + range_list * numpy.sin(az_angle_list)
 y = ref_coord_proj[1] + range_list * numpy.cos(az_angle_list)
 
+#Compute bounding box in mapped coordinates
 ul_x = numpy.append(x, [ref_coord_proj[0]]).min()
 ul_y = numpy.append(y, [ref_coord_proj[1]]).max()
 lr_x = numpy.append(x, [ref_coord_proj[0]]).max()
 lr_y = numpy.append(y, [ref_coord_proj[1]]).min()
-
-"""
-Lazy approach in early tests
-ul_x = ref_coord_proj[0] - far_range_slc * numpy.sin(az_angle_step*(az_N - 0))
-ul_y = ref_coord_proj[1] + far_range_slc
-lr_x = ref_coord_proj[0] + far_range_slc * numpy.sin(az_angle_step*(azimuth_lines - az_N))
-lr_y = ref_coord_proj[1] 
-"""
 
 bbox = [ul_x, ul_y, lr_x, lr_y]
 out_xsize_m = lr_x - ul_x
 out_ysize_m = ul_y - lr_y
 
 #Output grid resolution
+#Might want to take min of these two?  Or just use range res?
 res = numpy.mean([az_pixel_spacing.mean(), range_pixel_spacing])
 
 #Initialize output grid
@@ -281,7 +277,7 @@ out_nl = int(round(out_ysize_m/res))
 out_ns = int(round(out_xsize_m/res))
 out = numpy.zeros((out_nl, out_ns))
 
-#Want to double check center vs corner of UL pixel
+#Want to double check whether we're using center vs corner of UL pixel - add 0.5 px offsets
 out_gt = [ul_x, res, 0.0, ul_y, 0.0, -res]
 
 #Compute pixel coordinates for GPRI origin in output grid
@@ -305,12 +301,7 @@ r = numpy.sqrt((out_x_map-ref_coord_proj[0])**2 + (out_y_map-ref_coord_proj[1])*
 out_az_angle_list = numpy.arctan2((out_x_map-ref_coord_proj[0]), (out_y_map-ref_coord_proj[1]))
 if numpy.any(out_az_angle_list < 0):
     out_az_angle_list += 2 * numpy.pi
-    #out_az_angle_list %= 2 * numpy.pi
 az_px = az_N + out_az_angle_list / az_angle_step
-
-#Should be possible to do this in output map pixels, but the above works
-#r = numpy.sqrt(out_x_px**2 + out_y_px**2 + ((z - ref_coord_proj[2]) / range_pixel_spacing)**2) # / range_pixel_spacing
-#az = az_N - numpy.arctan2(out_x_px, out_y_px) / az_angle_step
 
 #Want to preserve only valid ranges
 r_ma = numpy.ma.masked_outside(r, near_range_slc, far_range_slc) 
@@ -327,8 +318,8 @@ common_mask = numpy.ma.mask_or(r_px_ma.mask, az_px_ma.mask)
 out_ma = numpy.ma.masked_array(out, mask=common_mask)
 
 #Trim to valid area
-#Need to update geotransform as well
-#Might be best to preserve the same dimensions, as different images will have different valid regions, preserving allows for direct comparison
+#Note: need to update geotransform as well - need an alternative masktrim that accepts/returns gt
+#On second thought, might be best to preserve the same dimensions, as different images will have different valid regions, preserving allows for direct comparison
 #out_ma_trim = malib.masktrim(out_ma)
 
 #Write out gtif 
