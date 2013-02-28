@@ -140,20 +140,22 @@ wavelength = c/freq
 title = p['title']
 date_str = p['date']
 center_time = p['center_time']
-#Open img and create masked array
-img_ma = numpy.ma.masked_equal(open_img(in_fn, p), 0)
 
 single_list = ['slc', 'mli']
 multi_list = ['unw', 'diff']
 #'adf', 'cc'
 
 if in_ext in single_list:
+    #Open img and create masked array
+    img_ma = numpy.ma.masked_equal(open_img(in_fn, p), 0)
     #Mask out values - might want to make this a function of range 
     #Or potentially input mask from GAMMA software
     #thresh = 0.12
     thresh = 0
     img_ma = numpy.ma.masked_less(img_ma, thresh)
 elif in_ext in multi_list:
+    #Open img and create masked array
+    img_ma = numpy.ma.masked_equal(open_img(in_fn, p), 0)
     #Want to open 2nd parameter file for diff or unw
     #par_fn2 = sys.argv[3]
     #p2 = parse_par(par_fn2)
@@ -173,6 +175,16 @@ elif in_ext in multi_list:
     #Now scale values to be LOS displacements in m/day
     #img_ma = -(wavelength/(4*numpy.pi)) * img_ma / dt_days
     img_ma = wavelength * -img_ma / dt_days
+elif in_ext == 'mat':
+    import scipy.io
+    mat = scipy.io.loadmat(in_fn)
+    #Assume array is preserved in first key
+    key = mat.keys()[0]
+    #Search for ndv
+    #Assume ndv if not found
+    ndv = 0
+    #Note: Kate's files are transpose of original inputs
+    img_ma = numpy.ma.masked_equal(mat[key].T, ndv)
 else:
     print "Unrecognized extension, continuing without filtering or scaling"
 
@@ -218,6 +230,15 @@ gcp_rc = [302, 665]
 #Might want to add z here, would need to update angle methods
 gcp_wc_latlon = [-121.76924, 46.84570]
 gcp_wc_proj = [593837.962, 5188753.337]
+
+#ROI20121102
+#gcp_rc = [168, 1996]
+#gcp_wc_latlon = [-121.76929,46.84573]
+#gcp_wc_proj = [593834.281,5188756.221]
+
+gcp_rc = [426, 1354]
+gcp_wc_latlon = [-121.73412,46.82708]
+gcp_wc_proj = [596548.902,5186726.870]
 
 #Sunrise
 #gcp_rc = [202, 2119]
@@ -299,8 +320,8 @@ r = numpy.sqrt((out_x_map-ref_coord_proj[0])**2 + (out_y_map-ref_coord_proj[1])*
 
 #Angles should be 0 to 2*pi relative to N
 out_az_angle_list = numpy.arctan2((out_x_map-ref_coord_proj[0]), (out_y_map-ref_coord_proj[1]))
-if numpy.any(out_az_angle_list < 0):
-    out_az_angle_list += 2 * numpy.pi
+#if numpy.any(out_az_angle_list < 0):
+#    out_az_angle_list += 2 * numpy.pi
 az_px = az_N + out_az_angle_list / az_angle_step
 
 #Want to preserve only valid ranges
