@@ -63,6 +63,15 @@ def parse_par(par_fn):
             p[key.strip(':')] = val 
     return p
 
+#Read a file containing a GCP with 'az_px, range_px, x_coord_proj, y_coord_proj'
+#Skip first line with comment
+def parse_gcp(fn):
+    f = open(fn, 'r')
+    next(f)
+    line = [float(i) for i in next(f).strip('\n').replace(' ', '').split(',')]
+    f.close()
+    return line
+
 def unit_vector(vector):
     return vector / numpy.linalg.norm(vector)
 
@@ -87,8 +96,8 @@ def signed_angle(v1, v2):
         else:
             return numpy.pi
     #Want to go from 0 to 2pi here
-    if angle1 < 0:
-        angle1 += 2 * numpy.pi
+    if angle1 > numpy.pi:
+        angle1 -= 2 * numpy.pi
     return angle1
 
 #extract Z value for single pixel or for coordinate arrays
@@ -110,6 +119,8 @@ def extractPoint(b, x, y):
 #Open input file 
 in_fn = sys.argv[1]
 in_ext = os.path.splitext(in_fn)[1].split('.')[1]
+
+out_fn = os.path.splitext(in_fn)[0]
 
 #Open parameter file
 #par_fn = in_fn+'.par'
@@ -138,7 +149,7 @@ wavelength = c/freq
 
 #Need to handle date extraction
 title = p['title']
-date_str = p['date']
+date_str = p['date'].replace(' ', '')
 center_time = p['center_time']
 
 single_list = ['slc', 'mli']
@@ -178,15 +189,35 @@ elif in_ext in multi_list:
 elif in_ext == 'mat':
     import scipy.io
     mat = scipy.io.loadmat(in_fn)
-    #Assume array is preserved in first key
-    key = mat.keys()[0]
+    #Mean
+    #key = mat.keys()[0]
+    #Std
+    #key = mat.keys()[1]
+    #Median
+    key = mat.keys()[4]
     #Search for ndv
     #Assume ndv if not found
-    ndv = 0
+    #ndv = 0
     #Note: Kate's files are transpose of original inputs
-    img_ma = numpy.ma.masked_equal(mat[key].T, ndv)
+    #img_ma = numpy.ma.masked_equal(mat[key].T, ndv)
+    #img_ma = numpy.ma.masked_equal(numpy.ma.fix_invalid(mat[key].T), ndv)
+
+    #out_fn += '_'date_str+'_'+key
+    out_fn = os.path.join(os.path.split(in_fn)[0], date_str+'_'+key)
+
+    #Note, values are negative
+    img_ma = -numpy.ma.fix_invalid(mat[key].T)
+
+    #mask_fn = os.path.splitext(in_fn)[0]+'_mask.mat'
+    #mask_mat = scipy.io.loadmat(mask_fn)
+    #mask_key = key+'mask'
+    #mask = mask_mat[mask_key].T
 else:
     print "Unrecognized extension, continuing without filtering or scaling"
+
+#Parse GCPs
+gcp_fn = os.path.splitext(in_fn)[0]+'.gcp' 
+gcp = parse_gcp(gcp_fn) 
 
 #Load DEM
 #Should be in projected, cartesian coords
@@ -220,38 +251,11 @@ ct = osr.CoordinateTransformation(ref_srs, dem_srs)
 #Projected coordinates of GPRI origin
 #x, y, z
 ref_coord_proj = numpy.array(ct.TransformPoint(*ref_coord))
-
-#GCP reference 
-
-#Paradise Pullout (roi)
-#Radar coords (az, r), (row, col)
-gcp_rc = [302, 665]
-#World coords (x, y)
-#Might want to add z here, would need to update angle methods
-gcp_wc_latlon = [-121.76924, 46.84570]
-gcp_wc_proj = [593837.962, 5188753.337]
-
-#ROI20121102
-#gcp_rc = [168, 1996]
-#gcp_wc_latlon = [-121.76929,46.84573]
-#gcp_wc_proj = [593834.281,5188756.221]
-
-gcp_rc = [426, 1354]
-gcp_wc_latlon = [-121.73412,46.82708]
-gcp_wc_proj = [596548.902,5186726.870]
-
-#Sunrise
-#gcp_rc = [202, 2119]
-#gcp_wc_latlon = [-121.73161,46.87221]
-#gcp_wc_proj = [596659.249,5191743.850]
-
 #GCP vector in (x,y) mapped coord (ignore z)
-#gcp_v = numpy.array([ref_coord_proj[0:2], gcp_wc_proj])
 #Setting ref_coord to (0,0)
-gcp_v = numpy.array(gcp_wc_proj - ref_coord_proj[0:2])
+gcp_v = numpy.array(gcp[2:4] - ref_coord_proj[0:2])
 
 #Define North vector in (x,y) mapped coord
-#N_v = numpy.array([ref_coord_proj[0:2], [ref_coord_proj[0], ref_coord_proj[1] + far_range_slc]]) 
 #Setting ref_coord to (0,0)
 N_v = numpy.array([ref_coord_proj[0], ref_coord_proj[1] + far_range_slc] - ref_coord_proj[0:2]) 
 
@@ -262,7 +266,7 @@ ang_N_minus_gcp = signed_angle(gcp_v, N_v)
 
 #This is the N azimuth sample number
 #NOTE: may be outside range of (0, azimuth_lines) 
-az_N = gcp_rc[0] - ang_N_minus_gcp / az_angle_step 
+az_N = gcp[0] - ang_N_minus_gcp / az_angle_step 
 
 #az_angle_list = ang_N_minus_gcp + az_angle_step * numpy.arange(azimuth_lines)
 az_angle_list = az_angle_step * (numpy.arange(azimuth_lines) - az_N)
@@ -327,7 +331,8 @@ az_px = az_N + out_az_angle_list / az_angle_step
 #Want to preserve only valid ranges
 r_ma = numpy.ma.masked_outside(r, near_range_slc, far_range_slc) 
 #Convert range values to pixels for extraction from img
-r_px_ma = r_ma / range_pixel_spacing
+#r_px_ma = r_ma / range_pixel_spacing
+r_px_ma = (r_ma - near_range_slc) / range_pixel_spacing
 #Want to preserve only valid azimuths
 az_px_ma = numpy.ma.masked_outside(az_px, 0, azimuth_lines)
 
@@ -346,7 +351,7 @@ out_ma = numpy.ma.masked_array(out, mask=common_mask)
 #Write out gtif 
 gtif_drv = gdal.GetDriverByName("GTiff")
 
-out_fn = in_fn+'_ortho.tif'
+out_fn = out_fn+'_ortho.tif'
 out_srs = dem_srs.ExportToWkt()
 out_dt = gdal.GDT_Float32
 out_ndv = 0.0
