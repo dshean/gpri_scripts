@@ -27,8 +27,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import scipy as sp
-import gdal
-import osr
+from osgeo import gdal, osr
 
 #From dshean's dem_tools
 import malib

@@ -1,7 +1,7 @@
 # coding: utf-8
 import malib
 import geolib
-import gdal
+from osgeo import gdal
 
 def dist(pos1, pos2):
     return np.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
