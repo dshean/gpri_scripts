@@ -30,8 +30,9 @@ import scipy as sp
 from osgeo import gdal, osr
 
 #From dshean's dem_tools
-import malib
-import geolib
+from pygeotools.lib import geolib
+from pygeotools.lib import iolib
+from pygeotools.lib import malib
 
 #Return a np array from image file
 def open_img(fn, p):
@@ -227,10 +228,10 @@ gcp = parse_gcp(gcp_fn)
 dem_fn = sys.argv[3]
 
 #Extract DEM to ma
-dem_ds = gdal.Open(dem_fn, gdal.GA_ReadOnly)
+dem_ds = iolib.fn_getds(dem_fn)
 dem_srs = geolib.get_ds_srs(dem_ds)
 dem_gt = dem_ds.GetGeoTransform()
-dem = malib.ds_getma(dem_ds)
+dem = iolib.ds_getma(dem_ds)
 
 #Compute azimuth pixel size in meters (function of range)
 az_pixel_spacing = az_angle_step * np.arange(near_range_slc, far_range_slc, range_pixel_spacing)
