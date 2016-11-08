@@ -13,5 +13,5 @@ Upon review, the most useful scripts are likely:
 
 These were written about the time I finally kicked my csh habit - looks like both bash/tcsh scripts are available.
 
-Python scripts depend on numpy, scipy, gdal/osr and libraries in demtools:
-https://github.com/dshean/demtools
+Python scripts depend on NumPy, SciPy, GDAL, and libraries in pygeotools:
+https://github.com/dshean/pygeotools
