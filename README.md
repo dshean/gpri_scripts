@@ -4,7 +4,7 @@ Scripts for processing and analyzing data from the GAMMA portable radar interfer
 ## Command-line utilities
 Upon review, the most useful scripts are likely:
 - `gpri_all.sh` - processing workflow from raw SLC images to unwrapped interferograms
-- `gpri2orgho.py` - utility to orthorectify data in radar coordinates (az, range) to map coordinates (x,y in UTM, for example) given a single control point and an existing DEM
+- `gpri2ortho.py` - utility to orthorectify data in radar coordinates (az, range) to map coordinates (x,y in UTM, for example) given a single control point and an existing DEM
 
 ## Notes
 These scripts were used for processing GPRI data collected for the Nisqually and Emmons Glaciers on Mount Rainier in 2012 (see http://www.the-cryosphere.net/9/2219/2015/tc-9-2219-2015.html)
