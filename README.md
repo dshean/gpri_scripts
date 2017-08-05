@@ -1,4 +1,4 @@
-#gpri_scripts
+# gpri_scripts
 Scripts for processing and analyzing data from the GAMMA portable radar interferometer
 
 ## Command-line utilities
